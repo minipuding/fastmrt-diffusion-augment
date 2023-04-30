@@ -1,0 +1,3 @@
+*.pyc
+/CIFAR10/
+/checkpoints/

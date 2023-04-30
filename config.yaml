@@ -1,0 +1,29 @@
+
+# training info
+state: "train" # or eval
+epoch: 200
+batch_size: 80
+device: "cuda:1"
+
+# model info
+T: 1000
+channel: 128
+channel_mult: [1, 2, 3, 4]
+attn: [2]
+num_res_blocks: 2
+dropout: 0.15
+lr: 0.0001
+multiplier: 2.
+beta_1: 0.0001
+beta_T: 0.02
+img_size: 32
+grad_clip: 1.
+training_load_weight: null
+
+# log info
+save_weight_dir: "./checkpoints/"
+test_load_weight: "ckpt_199_.pt"
+sampled_dir: "./SampledImgs/"
+sampledNoisyImgName: "NoisyNoGuidenceImgs.png"
+sampledImgName: "SampledNoGuidenceImgs.png"
+nrow: 8
