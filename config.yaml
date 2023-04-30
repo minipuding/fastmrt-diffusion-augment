@@ -1,9 +1,21 @@
 
 # training info
-state: "train" # or eval
+data_dir: "../Datasets/FastMRT Dataset V4.1/"
+batch_size: 64
 epoch: 200
-batch_size: 80
 device: "cuda:1"
+mean: {
+  "phantom": [0.00993, 0.00951],
+  "exvivo": [-0.00356, -0.00854],
+  "invivo": [-0.00056, 0.00110],
+  "all": [0.00266, 0.00044],
+}
+std: {
+  "phantom": [0.76661, 0.76696],
+  "exvivo": [0.49285, 0.49119],
+  "invivo": [0.45007, 0.44966],
+  "all": [0.60734, 0.60671],
+}
 
 # model info
 T: 1000
@@ -21,9 +33,10 @@ grad_clip: 1.
 training_load_weight: null
 
 # log info
-save_weight_dir: "./checkpoints/"
-test_load_weight: "ckpt_199_.pt"
-sampled_dir: "./SampledImgs/"
+save_dir: "./logs/"
+save_interval: 20
+test_load_weight: "ckpt_200_.pt"
+sampled_dir: "./logs/imgs/"
 sampledNoisyImgName: "NoisyNoGuidenceImgs.png"
 sampledImgName: "SampledNoGuidenceImgs.png"
 nrow: 8

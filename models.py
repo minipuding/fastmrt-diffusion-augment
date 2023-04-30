@@ -236,7 +236,7 @@ class UNet(nn.Module):
         # 实例化初始的time-embedding层
         self.time_embedding = TimeEmbedding(T, ch, tdim)
         # 实例化头部卷积层
-        self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
+        self.head = nn.Conv2d(2, ch, kernel_size=3, stride=1, padding=1)
 
         # 实例化U-Net的编码器部分，即降采样部分，每一层次由``num_res_blocks``个残差块组成
         # 其中chs用于记录降采样过程中的各阶段通道数，now_ch表示当前阶段的通道数
@@ -281,7 +281,7 @@ class UNet(nn.Module):
         self.tail = nn.Sequential(
             nn.GroupNorm(32, now_ch),
             Swish(),
-            nn.Conv2d(now_ch, 3, 3, stride=1, padding=1)
+            nn.Conv2d(now_ch, 2, 3, stride=1, padding=1)
         )
         # 注意这里只初始化头部和尾部模块，因为其他模块在实例化的时候已经初始化过了
         self.initialize()

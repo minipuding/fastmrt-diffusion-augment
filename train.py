@@ -1,7 +1,6 @@
 import yaml
 import os
 from typing import Dict
-
 import torch
 import torch.optim as optim
 from tqdm import tqdm
@@ -13,6 +12,10 @@ from torchvision.utils import save_image
 from diffusion import GaussianDiffusionTrainer, GaussianDiffusionSampler
 from models import UNet
 from torch.optim.lr_scheduler import _LRScheduler
+from argparse import ArgumentParser
+from fastmrt.data.dataset import SliceDataset
+from fastmrt.utils.fftc import ifft2c_numpy
+from fastmrt.utils.trans import complex_np_to_real_np as cn2rn
 
 
 class GradualWarmupScheduler(_LRScheduler):
@@ -48,12 +51,12 @@ class GradualWarmupScheduler(_LRScheduler):
 def train(config: Dict):
     device = torch.device(config["device"])
     # dataset
-    dataset = CIFAR10(
-        root='./CIFAR10', train=True, download=True,
+    dataset = SliceDataset(
+        root=config["data_dir"],
         transform=transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            lambda data: torch.from_numpy(cn2rn(ifft2c_numpy(data["kspace"]))),
+            transforms.Normalize(torch.Tensor(config["mean"][config["subset"]]).unsqueeze(-1).unsqueeze(-1), 
+                                 torch.Tensor(config["std"][config["subset"]]).unsqueeze(-1).unsqueeze(-1)),
         ]))
     dataloader = DataLoader(
         dataset, batch_size=config["batch_size"], shuffle=True, num_workers=4, drop_last=True, pin_memory=True)
@@ -63,7 +66,7 @@ def train(config: Dict):
                      num_res_blocks=config["num_res_blocks"], dropout=config["dropout"]).to(device)
     if config["training_load_weight"] is not None:
         net_model.load_state_dict(torch.load(os.path.join(
-            config["save_weight_dir"], config["training_load_weight"]), map_location=device))
+            config["save_dir"], config["training_load_weight"]), map_location=device))
     optimizer = torch.optim.AdamW(
         net_model.parameters(), lr=config["lr"], weight_decay=1e-4)
     # 设置学习率衰减，按余弦函数的1/2个周期衰减，从``lr``衰减至0
@@ -79,7 +82,7 @@ def train(config: Dict):
     # start training
     for e in range(config["epoch"]):
         with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
-            for images, labels in tqdmDataLoader:
+            for images in tqdmDataLoader:
                 # train
                 optimizer.zero_grad()                                    # 清空过往梯度
                 x_0 = images.to(device)                                  # 将输入图像加载到计算设备上
@@ -94,47 +97,61 @@ def train(config: Dict):
                     "img shape: ": x_0.shape,
                     "LR": optimizer.state_dict()['param_groups'][0]["lr"]
                 })                                                       # 设置进度条显示内容
-        warmUpScheduler.step()                                           # 调度器更新学习率
-        torch.save(net_model.state_dict(), os.path.join(
-            config["save_weight_dir"], 'ckpt_' + str(e) + "_.pt"))  # 保存模型
+        warmUpScheduler.step()
+        if (e + 1) % config["save_interval"] == 0:
+            torch.save(net_model.state_dict(), os.path.join(
+                config["save_dir"], f"ckpt_{e+1}_.pt"))
 
 
 def eval(config: Dict):
-    # load model and evaluate
+
     with torch.no_grad():
-        # 建立和加载模型
+
+        # build model and load checkpoint
         device = torch.device(config["device"])
         model = UNet(T=config["T"], ch=config["channel"], ch_mult=config["channel_mult"], attn=config["attn"],
                      num_res_blocks=config["num_res_blocks"], dropout=0.)
         ckpt = torch.load(os.path.join(
-            config["save_weight_dir"], config["test_load_weight"]), map_location=device)
+            config["save_dir"], config["test_load_weight"]), map_location=device)
         model.load_state_dict(ckpt)
-        print("model load weight done.")
-        # 实例化反向扩散采样器
         model.eval()
+        print("model load weight done.")
+
+        # build sampler
         sampler = GaussianDiffusionSampler(
             model, config["beta_1"], config["beta_T"], config["T"]).to(device)
-        # Sampled from standard normal distribution
-        # 随机生成高斯噪声图像并保存
+        
+        # sampled from standard normal distribution
         noisyImage = torch.randn(
             size=[config["batch_size"], 3, 32, 32], device=device)
-        saveNoisy = torch.clamp(noisyImage * 0.5 + 0.5, 0, 1)
-        save_image(saveNoisy, os.path.join(
-            config["sampled_dir"], config["sampledNoisyImgName"]), nrow=config["nrow"])
-        # 反向扩散并保存输出图像
         sampledImgs = sampler(noisyImage)
-        sampledImgs = sampledImgs * 0.5 + 0.5  # [0 ~ 1]
-        save_image(sampledImgs, os.path.join(
-            config["sampled_dir"],  config["sampledImgName"]), nrow=config["nrow"])
+
+        sampledImgs = sampledImgs * config["mean"][config["subset"]] + config["std"][config["subset"]]
         
 if __name__ == '__main__':
-    
-    with open('./config.yaml') as fconfig:
-        config = yaml.load(fconfig.read(), Loader=yaml.FullLoader)
 
-    if config.pop("state") == "train":
+    # command line inplements
+    parser = ArgumentParser()
+    parser.add_argument("--stage", "-s", type=str, required=True, 
+                        help="the stage you want to launch, one of `train` and `eval`.")
+    parser.add_argument("--subset", "-ss", type=str, required=True,
+                        help="the subset you want to train, one of `phantom`, `exvivo` and `invivo`.")
+    parser.add_argument("--cfg", "-c", type=str, required=False, default='./config.yaml',
+                        help="the directory of config file, default is `./config.yaml`.")
+    args = parser.parse_args()
+    
+    # read config file
+    with open(args.cfg) as fconfig:
+        config = yaml.load(fconfig.read(), Loader=yaml.FullLoader)
+    config["subset"] = args.subset
+    config["data_dir"] = os.path.join(config["data_dir"], args.subset, "train")
+    config["save_dir"] = os.path.join(config["save_dir"], args.subset)
+    if os.path.exists(config["save_dir"]) is False:
+        os.mkdir(config["save_dir"])
+
+    # launch train or eval process
+    if args.stage == "train":
         train(config)
     else:
         eval(config)
-    train(config=config)
 

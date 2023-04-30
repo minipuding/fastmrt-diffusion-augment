@@ -1,3 +1,4 @@
 *.pyc
 /CIFAR10/
-/checkpoints/
+/logs/
+/scripts/
