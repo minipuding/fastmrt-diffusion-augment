@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import trange
 
 # ``extract``函数的作用是从v这一序列中按照索引t取出需要的数，然后reshape到输入数据x的维度
 def extract(v, t, x_shape):
@@ -89,8 +90,11 @@ class GaussianDiffusionSampler(nn.Module):
         """
         # 反向扩散过程，从x_t迭代至x_0
         x_t = x_T
-        for time_step in reversed(range(self.T)):
-            print(time_step)
+        for time_step in trange(self.T):
+
+            # reverse
+            time_step = self.T - time_step - 1
+
             # t = [1, 1, ....] * time_step, 长度为batch_size
             t = x_t.new_ones([x_T.shape[0], ], dtype=torch.long) * time_step
             # 计算条件概率分布q(x_{t-1}|x_t)的均值和方差
@@ -105,7 +109,7 @@ class GaussianDiffusionSampler(nn.Module):
             assert torch.isnan(x_t).int().sum() == 0, "nan in tensor."
         x_0 = x_t
         # ``torch.clip(x_0, -1, 1)``,把x_0的值限制在-1到1之间，超出部分截断
-        return torch.clip(x_0, -1, 1)   
+        return x_0 # torch.clip(x_0, -1, 1)   
     
 
 # ``GaussianDiffusionTrainer``包含了Diffusion Model的前向过程(加噪) & 训练过程

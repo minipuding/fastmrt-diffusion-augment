@@ -1,6 +1,6 @@
 
 # training info
-data_dir: "../Datasets/FastMRT Dataset V4.1/"
+data_dir: "../Datasets/FastMRT Dataset V4.2/"
 batch_size: 64
 epoch: 200
 device: "cuda:1"
@@ -18,7 +18,7 @@ std: {
 }
 
 # model info
-T: 1000
+T: 600
 channel: 128
 channel_mult: [1, 2, 3, 4]
 attn: [2]
@@ -34,9 +34,6 @@ training_load_weight: null
 
 # log info
 save_dir: "./logs/"
-save_interval: 20
-test_load_weight: "ckpt_200_.pt"
-sampled_dir: "./logs/imgs/"
-sampledNoisyImgName: "NoisyNoGuidenceImgs.png"
-sampledImgName: "SampledNoGuidenceImgs.png"
-nrow: 8
+save_interval: 100
+test_load_weight: "fastmrt_ckpt_exvivo_T600.pt"
+gen_num: 5120

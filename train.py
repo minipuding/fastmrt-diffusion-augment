@@ -6,16 +6,18 @@ import torch.optim as optim
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10
 from torchvision.utils import save_image
+import h5py
+import numpy as np
 
 from diffusion import GaussianDiffusionTrainer, GaussianDiffusionSampler
 from models import UNet
 from torch.optim.lr_scheduler import _LRScheduler
 from argparse import ArgumentParser
 from fastmrt.data.dataset import SliceDataset
-from fastmrt.utils.fftc import ifft2c_numpy
+from fastmrt.utils.fftc import ifft2c_numpy, fft2c_numpy
 from fastmrt.utils.trans import complex_np_to_real_np as cn2rn
+from fastmrt.utils.trans import real_tensor_to_complex_np as rt2cn
 
 
 class GradualWarmupScheduler(_LRScheduler):
@@ -57,6 +59,7 @@ def train(config: Dict):
             lambda data: torch.from_numpy(cn2rn(ifft2c_numpy(data["kspace"]))),
             transforms.Normalize(torch.Tensor(config["mean"][config["subset"]]).unsqueeze(-1).unsqueeze(-1), 
                                  torch.Tensor(config["std"][config["subset"]]).unsqueeze(-1).unsqueeze(-1)),
+            lambda data: torch.clip(data, min=-3., max=3.)
         ]))
     dataloader = DataLoader(
         dataset, batch_size=config["batch_size"], shuffle=True, num_workers=4, drop_last=True, pin_memory=True)
@@ -80,17 +83,20 @@ def train(config: Dict):
         net_model, config["beta_1"], config["beta_T"], config["T"]).to(device)
 
     # start training
+    m=0.9
+    loss = 1e3
     for e in range(config["epoch"]):
         with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
             for images in tqdmDataLoader:
                 # train
                 optimizer.zero_grad()                                    # 清空过往梯度
                 x_0 = images.to(device)                                  # 将输入图像加载到计算设备上
-                loss = trainer(x_0).sum() / 1000.                        # 前向传播并计算损失
+                loss = m * loss + (1 - m) * (trainer(x_0).sum() / 1000.)
                 loss.backward()                                          # 反向计算梯度
                 torch.nn.utils.clip_grad_norm_(
                     net_model.parameters(), config["grad_clip"])    # 裁剪梯度，防止梯度爆炸
                 optimizer.step()                                         # 更新参数
+                loss = loss.detach()
                 tqdmDataLoader.set_postfix(ordered_dict={
                     "epoch": e,
                     "loss: ": f"{loss.item():.4g}",
@@ -103,7 +109,7 @@ def train(config: Dict):
                 config["save_dir"], f"ckpt_{e+1}_.pt"))
 
 
-def eval(config: Dict):
+def pred(config: Dict):
 
     with torch.no_grad():
 
@@ -120,13 +126,32 @@ def eval(config: Dict):
         # build sampler
         sampler = GaussianDiffusionSampler(
             model, config["beta_1"], config["beta_T"], config["T"]).to(device)
-        
-        # sampled from standard normal distribution
-        noisyImage = torch.randn(
-            size=[config["batch_size"], 3, 32, 32], device=device)
-        sampledImgs = sampler(noisyImage)
 
-        sampledImgs = sampledImgs * config["mean"][config["subset"]] + config["std"][config["subset"]]
+        mean = torch.Tensor(config["mean"][config["subset"]]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)                                 
+        std = torch.Tensor(config["std"][config["subset"]]).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+
+        for batch_idx in range(config["gen_num"] // config["batch_size"]):
+
+            # sampled from standard normal distribution
+            noisyImage = torch.randn(
+                size=[config["batch_size"], 2, 96, 96], device=device)
+            sampled_imgs = sampler(noisyImage)
+
+            # save datas
+            sampled_imgs = sampled_imgs.cpu() * std + mean
+            for idx in range(config["batch_size"]):
+
+                # prepare saved data
+                curr_idx = batch_idx * config["batch_size"] + idx
+                curr_ksp = fft2c_numpy(rt2cn(sampled_imgs[idx]).transpose())[:, :, np.newaxis, np.newaxis, np.newaxis]  # to fastmrt-data-style: 5d-data
+                header = dict(type="diffusion-augs", width=96, height=96, frames=1, slices=1, coils=1)
+                
+                # write
+                with h5py.File(os.path.join(config["sampled_dir"], f"d{curr_idx:05d}.h5"), "w") as hf:
+                    hf.create_dataset("kspace", data=curr_ksp, dtype="complex64")
+                    hf.create_dataset("tmap_masks", data=None, dtype='<f4')
+                    for key, value in header.items():
+                        hf.attrs[key] = value
         
 if __name__ == '__main__':
 
@@ -146,12 +171,15 @@ if __name__ == '__main__':
     config["subset"] = args.subset
     config["data_dir"] = os.path.join(config["data_dir"], args.subset, "train")
     config["save_dir"] = os.path.join(config["save_dir"], args.subset)
+    config["sampled_dir"] = os.path.join(config["save_dir"], "datas")
     if os.path.exists(config["save_dir"]) is False:
         os.mkdir(config["save_dir"])
+    if os.path.exists(config["sampled_dir"]) is False:
+        os.mkdir(config["sampled_dir"])
 
     # launch train or eval process
     if args.stage == "train":
         train(config)
-    else:
-        eval(config)
+    elif args.stage == "pred":
+        pred(config)
 
