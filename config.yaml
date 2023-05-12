@@ -1,6 +1,7 @@
 
 # training info
-data_dir: "../Datasets/FastMRT Dataset V4.2/"
+data_dir: 
+  - "../Datasets/FastMRT Dataset V5.0/"
 batch_size: 64
 epoch: 200
 device: "cuda:1"

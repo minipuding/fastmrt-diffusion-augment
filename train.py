@@ -169,7 +169,7 @@ if __name__ == '__main__':
     with open(args.cfg) as fconfig:
         config = yaml.load(fconfig.read(), Loader=yaml.FullLoader)
     config["subset"] = args.subset
-    config["data_dir"] = os.path.join(config["data_dir"], args.subset, "train")
+    config["data_dir"] = [os.path.join(d_dir, args.subset, "train") for d_dir in config["data_dir"]]
     config["save_dir"] = os.path.join(config["save_dir"], args.subset)
     config["sampled_dir"] = os.path.join(config["save_dir"], "datas")
     if os.path.exists(config["save_dir"]) is False:
