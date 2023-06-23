@@ -72,13 +72,10 @@ def train(config: Dict):
             config["save_dir"], config["training_load_weight"]), map_location=device))
     optimizer = torch.optim.AdamW(
         net_model.parameters(), lr=config["lr"], weight_decay=1e-4)
-    # 设置学习率衰减，按余弦函数的1/2个周期衰减，从``lr``衰减至0
     cosineScheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer, T_max=config["epoch"], eta_min=0, last_epoch=-1)
-    # 设置逐步预热调度器，学习率从0逐渐增加至multiplier * lr，共用1/10总epoch数，后续学习率按``cosineScheduler``设置进行变化
     warmUpScheduler = GradualWarmupScheduler(
         optimizer=optimizer, multiplier=config["multiplier"], warm_epoch=config["epoch"] // 10, after_scheduler=cosineScheduler)
-    # 实例化训练模型
     trainer = GaussianDiffusionTrainer(
         net_model, config["beta_1"], config["beta_T"], config["T"]).to(device)
 
@@ -89,20 +86,20 @@ def train(config: Dict):
         with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
             for images in tqdmDataLoader:
                 # train
-                optimizer.zero_grad()                                    # 清空过往梯度
-                x_0 = images.to(device)                                  # 将输入图像加载到计算设备上
+                optimizer.zero_grad()
+                x_0 = images.to(device)
                 loss = m * loss + (1 - m) * (trainer(x_0).sum() / 1000.)
-                loss.backward()                                          # 反向计算梯度
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(
-                    net_model.parameters(), config["grad_clip"])    # 裁剪梯度，防止梯度爆炸
-                optimizer.step()                                         # 更新参数
+                    net_model.parameters(), config["grad_clip"])
+                optimizer.step()
                 loss = loss.detach()
                 tqdmDataLoader.set_postfix(ordered_dict={
                     "epoch": e,
                     "loss: ": f"{loss.item():.4g}",
                     "img shape: ": x_0.shape,
                     "LR": optimizer.state_dict()['param_groups'][0]["lr"]
-                })                                                       # 设置进度条显示内容
+                })
         warmUpScheduler.step()
         if (e + 1) % config["save_interval"] == 0:
             torch.save(net_model.state_dict(), os.path.join(
