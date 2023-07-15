@@ -2,5 +2,4 @@
 /CIFAR10/
 /logs/
 /scripts/
-*.png
 /vis.ipynb
