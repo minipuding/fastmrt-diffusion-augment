@@ -157,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument("--stage", "-s", type=str, required=True, 
                         help="the stage you want to launch, one of `train` and `eval`.")
     parser.add_argument("--subset", "-ss", type=str, required=True,
-                        help="the subset you want to train, one of `phantom`, `exvivo` and `invivo`.")
+                        help="the subset you want to train, one of `phantom` and `exvivo`.")
     parser.add_argument("--cfg", "-c", type=str, required=False, default='./config.yaml',
                         help="the directory of config file, default is `./config.yaml`.")
     args = parser.parse_args()
