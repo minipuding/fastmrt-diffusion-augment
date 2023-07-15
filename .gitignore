@@ -1,0 +1,6 @@
+*.pyc
+/CIFAR10/
+/logs/
+/scripts/
+*.png
+/vis.ipynb

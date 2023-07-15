@@ -1,0 +1,40 @@
+
+# training info
+data_dir: 
+  - "../Datasets/FastMRT Dataset V5.0/"
+batch_size: 64
+epoch: 200
+device: "cuda:1"
+mean: {
+  "phantom": [0.00993, 0.00951],
+  "exvivo": [-0.00356, -0.00854],
+  "invivo": [-0.00056, 0.00110],
+  "all": [0.00266, 0.00044],
+}
+std: {
+  "phantom": [0.76661, 0.76696],
+  "exvivo": [0.49285, 0.49119],
+  "invivo": [0.45007, 0.44966],
+  "all": [0.60734, 0.60671],
+}
+
+# model info
+T: 600
+channel: 128
+channel_mult: [1, 2, 3, 4]
+attn: [2]
+num_res_blocks: 2
+dropout: 0.15
+lr: 0.0001
+multiplier: 2.
+beta_1: 0.0001
+beta_T: 0.02
+img_size: 32
+grad_clip: 1.
+training_load_weight: null
+
+# log info
+save_dir: "./logs/"
+save_interval: 100
+test_load_weight: "fastmrt_ckpt_exvivo_T600.pt"
+gen_num: 5120
