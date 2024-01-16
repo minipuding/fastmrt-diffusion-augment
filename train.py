@@ -103,7 +103,7 @@ def train(config: Dict):
         warmUpScheduler.step()
         if (e + 1) % config["save_interval"] == 0:
             torch.save(net_model.state_dict(), os.path.join(
-                config["save_dir"], f"ckpt_{e+1}_.pt"))
+                config["save_dir"], f"fastmrt_ckpt_{config['subset']}_T{config['T']}_epoch{e+1}_num{config['gen_num']}.pt"))
 
 
 def pred(config: Dict):
@@ -114,6 +114,8 @@ def pred(config: Dict):
         device = torch.device(config["device"])
         model = UNet(T=config["T"], ch=config["channel"], ch_mult=config["channel_mult"], attn=config["attn"],
                      num_res_blocks=config["num_res_blocks"], dropout=0.)
+        if not config["test_load_weight"]:
+            config["test_load_weight"] = f"fastmrt_ckpt_{config['subset']}_T{config['T']}_epoch{config['epoch']}_num{config['gen_num']}.pt"
         ckpt = torch.load(os.path.join(
             config["save_dir"], config["test_load_weight"]), map_location=device)
         model.load_state_dict(ckpt)
@@ -166,9 +168,9 @@ if __name__ == '__main__':
     with open(args.cfg) as fconfig:
         config = yaml.load(fconfig.read(), Loader=yaml.FullLoader)
     config["subset"] = args.subset
-    config["data_dir"] = [os.path.join(d_dir, args.subset, "train") for d_dir in config["data_dir"]]
+    config["data_dir"] = [os.path.join(d_dir, args.subset, "train", "source") for d_dir in config["data_dir"]]
     config["save_dir"] = os.path.join(config["save_dir"], args.subset)
-    config["sampled_dir"] = os.path.join(config["save_dir"], "datas")
+    config["sampled_dir"] = os.path.join(config["save_dir"], f"datas_T{config['T']}_num{config['gen_num']}")
     if os.path.exists(config["save_dir"]) is False:
         os.mkdir(config["save_dir"])
     if os.path.exists(config["sampled_dir"]) is False:
